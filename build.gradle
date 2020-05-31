@@ -7,6 +7,10 @@ repositories {
 
 
 dependencies {
-    compile group: 'com.amazonaws', name: 'aws-java-sdk', version: '1.11.789'
+    //compile group: 'com.amazonaws', name: 'aws-java-sdk', version: '1.11.789'
+    //compile group: 'com.amazonaws', name: 'aws-java-sdk', version: '1.6.12'
+    compile group: 'com.amazonaws', name: 'aws-java-sdk', version: '1.8.12'
+    
+    
 }
 

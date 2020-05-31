@@ -6,21 +6,22 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
+//import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.AmazonS3Client;
+//import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.Bucket;
-import com.amazonaws.services.s3.model.ListObjectsV2Result;
+//import com.amazonaws.services.s3.model.ListObjectsV2Result;
 import com.amazonaws.services.s3.model.ListVersionsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.model.S3VersionSummary;
 import com.amazonaws.services.s3.model.VersionListing;
-import com.amazonaws.services.s3.transfer.MultipleFileUpload;
+//import com.amazonaws.services.s3.transfer.MultipleFileUpload;
 import com.amazonaws.services.s3.transfer.TransferManager;
-import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+//import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 
 public class S3Util {
@@ -59,9 +60,11 @@ public class S3Util {
 		AWSCredentials credential = new BasicAWSCredentials(access_key, secret_key);
 		// proxy setting
 
-		s3 = AmazonS3ClientBuilder.standard().withCredentials(new AWSStaticCredentialsProvider(credential))
-				.build();
+//		s3 = AmazonS3ClientBuilder.standard().withCredentials(new AWSStaticCredentialsProvider(credential))
+//				.build();
 
+		s3 = new AmazonS3Client(credential);
+		
 		System.out.println("setAWSAuth END");
 	}
 
@@ -115,7 +118,8 @@ public class S3Util {
 	public void createBucket(String bucket_name) {
 		System.out.println("createBucket START");
 		Bucket bucket = null;
-		if (s3.doesBucketExistV2(bucket_name)) {
+		//if (s3.doesBucketExistV2(bucket_name)) {
+		if (s3.doesBucketExist(bucket_name)) {
 			System.out.format("Bucket %s already exists.\n", bucket_name);
 			bucket = getBucket(bucket_name);
 		} else {
@@ -123,7 +127,7 @@ public class S3Util {
 				bucket = s3.createBucket(bucket_name);
 				System.out.println(bucket.getName());
 			} catch (AmazonS3Exception e) {
-				System.err.println(e.getErrorMessage());
+				System.err.println(e.getMessage());
 			}
 		}
 		System.out.println("createBucket END");
@@ -173,47 +177,11 @@ public class S3Util {
 			System.out.println(" OK, bucket ready to delete!");
 			s3.deleteBucket(bucket_name);
 		} catch (AmazonServiceException e) {
-			System.err.println(e.getErrorMessage());
+			System.err.println(e.getMessage());
 			System.exit(1);
 		}
 
 		System.out.println("deleteBucket END");
-	}
-
-	/**
-	 * TransferManager를 사용한 단일 파일업로드
-	 * 
-	 * @param file_path
-	 * @param bucket_name
-	 * @param key_prefix
-	 * @param pause
-	 */
-	public void uploadToS3UsingTM(String bucketName, String s3FilePath, boolean pause) {
-		System.out.println("uploadToS3UsingTM START");
-
-		File f = new File(s3FilePath);
-
-		TransferManager xfer_mgr = TransferManagerBuilder.standard()
-				.withS3Client(s3)
-				.build();
-		
-		try {
-			Upload xfer = xfer_mgr.upload(bucketName, f.getName(), f);
-			// loop with Transfer.isDone()
-
-            xfer.waitForCompletion();
-		} catch (AmazonServiceException e) {
-			System.err.println(e.getErrorMessage());
-			System.exit(2);
-		} catch (AmazonClientException | InterruptedException e) {
-			System.err.println(e.getMessage());
-			System.exit(3);
-		} finally {
-			xfer_mgr.shutdownNow(false);
-		}
-		
-
-		System.out.println("uploadToS3UsingTM END");
 	}
 	
 	
@@ -228,16 +196,18 @@ public class S3Util {
 
 		File f = targetFile;
 
-		TransferManager xfer_mgr = TransferManagerBuilder.standard()
-				.withS3Client(s3)
-				.build();
+//		TransferManager xfer_mgr = TransferManagerBuilder.standard()
+//				.withS3Client(s3)
+//				.build();
+		
+		TransferManager xfer_mgr = new TransferManager(s3);
 		
 		try {
 			Upload xfer = xfer_mgr.upload(bucketName, f.getName(), f);
 
             xfer.waitForCompletion();
 		} catch (AmazonServiceException e) {
-			System.err.println(e.getErrorMessage());
+			System.err.println(e.getMessage());
 			System.exit(2);
 		} catch (AmazonClientException | InterruptedException e) {
 			System.err.println(e.getMessage());
@@ -251,68 +221,6 @@ public class S3Util {
 	}
 	
 	/**
-	 * 다수 파일 업로드
-	 * 
-	 * @param bucket_name
-	 * @param key_prefix
-	 * @param parentsDir
-	 * @param file_paths
-	 * @param pause
-	 */
-	public void uploadToS3FileList(String bucket_name, String key_prefix, String parentsDir,
-			String[] file_paths, boolean pause) {
-		System.out.println("uploadToS3UsingTMFileList START");
-
-		ArrayList<File> files = new ArrayList<File>();
-		for (String path : file_paths) {
-			files.add(new File(path));
-		}
-
-		TransferManager xfer_mgr = TransferManagerBuilder.standard().withS3Client(s3).build();
-		try {
-			MultipleFileUpload xfer = xfer_mgr.uploadFileList(bucket_name, key_prefix, new File(parentsDir), files);
-			// loop with Transfer.isDone()
-			XferMgrProgress.showTransferProgress(xfer);
-			// or block with Transfer.waitForCompletion()
-			XferMgrProgress.waitForCompletion(xfer);
-		} catch (AmazonServiceException e) {
-			System.err.println(e.getErrorMessage());
-			System.exit(1);
-		}
-		xfer_mgr.shutdownNow(false);
-		System.out.println("uploadToS3UsingTMFileList END");
-	}
-
-	/**
-	 * 디렉토리 업로드 (동기화)
-	 * 
-	 * @param bucket_name
-	 * @param dir_path    업로드할 곳의 경로
-	 * @param key_prefix  공통 경로
-	 * @param recursive   하위 디렉토리 포함 true , 하위디렉토리 비포함 false
-	 */
-	public void uploadToDir(String bucket_name, String key_prefix, String dir_path, boolean recursive) {
-		System.out.println("uploadToUsingTMDir START");
-		TransferManager xfer_mgr = TransferManagerBuilder.standard().withS3Client(s3).build();
-
-		try {
-			MultipleFileUpload xfer = xfer_mgr.uploadDirectory(bucket_name, key_prefix, new File(dir_path), recursive);
-			// loop with Transfer.isDone()
-			XferMgrProgress.showTransferProgress(xfer);
-			// or block with Transfer.waitForCompletion()
-			XferMgrProgress.waitForCompletion(xfer);
-		} catch (AmazonServiceException e) {
-			System.err.println(e.getErrorMessage());
-			System.exit(1);
-		}finally {
-			xfer_mgr.shutdownNow(false);
-		}
-		
-		System.out.println("uploadToUsingTMDir END");
-	}
-	
-
-	/**
 	 * 파일 목록 가져오기
 	 * 
 	 * @param bucket_name
@@ -320,7 +228,7 @@ public class S3Util {
 	public void getFileList(String bucket_name) {
 		System.out.println("getFileList START");
 		System.out.format("Objects in S3 bucket %s:\n", bucket_name);
-		ListObjectsV2Result result = s3.listObjectsV2(bucket_name);
+		ObjectListing result = s3.listObjects(bucket_name);
 		List<S3ObjectSummary> objects = result.getObjectSummaries();
 		for (S3ObjectSummary os : objects) {
 			System.out.println("* " + os.getKey());
